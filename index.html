@@ -13,7 +13,7 @@
     body {
       margin: 0; min-height: 100vh; padding: 16px;
       display: flex; flex-direction: column; align-items: center;
-      background: #f1f5f9; color: #1e293b;
+      background: linear-gradient(#e0f2fe, #f1f5f9 40%) fixed; color: #1e293b;
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       -webkit-tap-highlight-color: transparent;
     }
@@ -25,10 +25,35 @@
       width: 100%; max-width: 28rem; background: #fff; border: 1px solid #e2e8f0;
       border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,.08); overflow: hidden;
     }
-    header { background: #047857; color: #fff; padding: 16px; text-align: center; }
-    header .edition { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: #a7f3d0; }
-    header h1 { margin: 2px 0 0; font-size: 1.125rem; font-weight: 900; line-height: 1.2; }
-    header .team { margin: 6px 0 0; font-size: .95rem; font-weight: 700; color: #ecfdf5; }
+    /* Header: lucht met overdrijvende wolkenschapen boven een groene heuvel */
+    header {
+      position: relative; overflow: hidden; text-align: center; color: #064e3b;
+      padding: 46px 16px 34px;
+      background: linear-gradient(#bae6fd, #e0f2fe 75%);
+    }
+    header .title { position: relative; z-index: 1; text-shadow: 0 0 6px #f0f9ff, 0 0 2px #f0f9ff; }
+    header .edition { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: #0f766e; }
+    header h1 { margin: 2px 0 0; font-size: 1.2rem; font-weight: 900; line-height: 1.2; }
+    header .team { margin: 6px 0 0; font-size: .95rem; font-weight: 700; color: #065f46; }
+    header .hill { position: absolute; left: 0; bottom: -1px; width: 100%; height: 22px; display: block; }
+
+    .flock { position: absolute; inset: 0; pointer-events: none; }
+    .lane { position: absolute; left: 0; width: 100%; animation: drift linear infinite; }
+    .lane svg { display: block; }
+    /* Twee schapen in de lucht boven de titel, één kleintje graast over de heuvel */
+    .lane.l1 { top: 6px;     animation-duration: 55s;  animation-delay: -12s; }
+    .lane.l2 { top: 12px;    animation-duration: 80s;  animation-delay: -55s; opacity: .65; }
+    .lane.l3 { bottom: 12px; animation-duration: 120s; animation-delay: -30s; }
+    @keyframes drift {
+      from { transform: translateX(-80px); }
+      to   { transform: translateX(100%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lane { animation: none; }
+      .lane.l1 { transform: translateX(8%); }
+      .lane.l2 { transform: translateX(78%); }
+      .lane.l3 { transform: translateX(55%); }
+    }
 
     .screen { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
     label { display: block; font-size: .875rem; font-weight: 600; margin-bottom: 4px; color: #334155; }
@@ -101,9 +126,35 @@
   <div class="card">
 
     <header>
-      <span class="edition">Burendag Editie</span>
-      <h1>Schapendrift Klootschiet Tracker</h1>
-      <p id="teamHeader" class="team hidden"></p>
+      <!-- Wolkenschaap: wollen lijf van cirkels, donkere kop en pootjes -->
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <symbol id="sheep" viewBox="0 0 64 40">
+          <g stroke="#475569" stroke-width="2.4" stroke-linecap="round">
+            <path d="M20 30v7M28 31v7M38 31v7M46 30v7"/>
+          </g>
+          <g fill="#fff" stroke="#e2e8f0" stroke-width="1">
+            <circle cx="18" cy="20" r="9"/><circle cx="27" cy="13" r="10"/><circle cx="38" cy="13" r="9"/>
+            <circle cx="46" cy="21" r="8"/><circle cx="36" cy="25" r="9"/><circle cx="24" cy="25" r="9"/>
+          </g>
+          <ellipse cx="54" cy="19" rx="6" ry="7.5" fill="#475569"/>
+          <ellipse cx="51" cy="13" rx="3" ry="1.6" fill="#475569" transform="rotate(-25 51 13)"/>
+          <circle cx="56" cy="17" r="1.1" fill="#fff"/>
+        </symbol>
+      </svg>
+      <div class="flock" aria-hidden="true">
+        <div class="lane l1"><svg width="56" height="35"><use href="#sheep"/></svg></div>
+        <div class="lane l2"><svg width="38" height="24"><use href="#sheep"/></svg></div>
+        <div class="lane l3"><svg width="30" height="19"><use href="#sheep"/></svg></div>
+      </div>
+      <div class="title">
+        <span class="edition">Burendag Editie</span>
+        <h1>Schapendrift Klootschiet Tracker</h1>
+        <p id="teamHeader" class="team hidden"></p>
+      </div>
+      <svg class="hill" viewBox="0 0 400 22" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 22V12C60 2 120 2 190 10S320 20 400 8V22Z" fill="#059669"/>
+        <path d="M0 22V16C90 8 170 12 250 16S360 18 400 14V22Z" fill="#047857"/>
+      </svg>
     </header>
 
     <!-- Setup Scherm (Spelers toevoegen) -->
