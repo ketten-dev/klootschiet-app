@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>KlootTracker</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#15803d">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 flex flex-col items-center p-4">
+
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col border border-slate-200">
+    
+    <!-- Header -->
+    <header class="bg-emerald-700 text-white p-4 text-center">
+      <h1 class="text-xl font-bold tracking-wide">🌳 Klootschieten Tracker</h1>
+      <p id="subStatus" class="text-xs text-emerald-100 mt-0.5">Klaar voor de tocht</p>
+    </header>
+
+    <!-- Setup Scherm (Spelers toevoegen) -->
+    <div id="setupScreen" class="p-5 flex-1 flex flex-col space-y-4">
+      <div>
+        <label class="block text-sm font-semibold mb-1 text-slate-700">Teamnaam</label>
+        <input id="teamNameInput" type="text" placeholder="Bijv. De Snelle Worpen" class="w-full border rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-emerald-500">
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold mb-1 text-slate-700">Spelers (in volgorde van gooien)</label>
+        <div class="flex gap-2">
+          <input id="newPlayerInput" type="text" placeholder="Naam speler" class="flex-1 border rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-emerald-500">
+          <button id="addPlayerBtn" class="bg-emerald-600 text-white font-bold px-4 rounded-lg hover:bg-emerald-700">+</button>
+        </div>
+      </div>
+
+      <ul id="playerListUI" class="space-y-1.5 flex-1 overflow-y-auto max-h-48 border border-dashed rounded-lg p-2 bg-slate-50">
+        <!-- Dynamische lijst -->
+      </ul>
+
+      <button id="startBtn" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-xl shadow mt-auto">
+        Start Tocht 🚀
+      </button>
+    </div>
+
+    <!-- Spel Scherm -->
+    <div id="gameScreen" class="p-5 flex-1 flex flex-col space-y-4 hidden">
+      
+      <!-- Actieve Speler Kaart -->
+      <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center shadow-inner">
+        <span class="text-xs uppercase tracking-wider text-emerald-700 font-semibold">Nu aan de beurt</span>
+        <h2 id="currentPlayerName" class="text-2xl font-black text-emerald-950 mt-0.5">-</h2>
+        <p id="nextPlayerInfo" class="text-xs text-slate-500 mt-1">Hierna: ...</p>
+      </div>
+
+      <!-- Teller Dashboard -->
+      <div class="grid grid-cols-2 gap-3 text-center">
+        <div class="bg-slate-50 border rounded-xl p-3">
+          <div class="text-xs text-slate-500">Totaal Worpen</div>
+          <div id="totalThrowsCount" class="text-3xl font-extrabold text-slate-800">0</div>
+        </div>
+        <div class="bg-slate-50 border rounded-xl p-3">
+          <div class="text-xs text-slate-500">Strafworpen (Sloot)</div>
+          <div id="penaltyThrowsCount" class="text-3xl font-extrabold text-rose-600">0</div>
+        </div>
+      </div>
+
+      <!-- Grote Knoppen -->
+      <div class="space-y-3 pt-2">
+        <button id="throwBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition-transform text-white font-black py-4 rounded-2xl text-xl shadow-lg flex items-center justify-center gap-2">
+          🎯 Worp geteld!
+        </button>
+        
+        <button id="penaltyBtn" class="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold py-3 rounded-xl text-sm flex items-center justify-center gap-1.5">
+          💦 Plons / Sloot (+1 Strafworp)
+        </button>
+      </div>
+
+      <!-- Recente Worpen Log & Undo -->
+      <div class="flex-1 flex flex-col pt-2 min-h-0">
+        <div class="flex justify-between items-center mb-1">
+          <span class="text-xs font-semibold text-slate-600">Geschiedenis</span>
+          <button id="undoBtn" class="text-xs text-rose-600 hover:underline">↩ Ongedaan maken</button>
+        </div>
+        <div id="historyLog" class="text-xs border rounded-lg p-2 bg-slate-50 flex-1 overflow-y-auto space-y-1 text-slate-600 font-mono">
+          <!-- Worpen verschijnen hier -->
+        </div>
+      </div>
+
+      <button id="resetBtn" class="text-xs text-slate-400 hover:text-rose-500 text-center pt-1">
+        Tocht afronden / Opnieuw beginnen
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    // App State
+    let state = {
+      teamName: '',
+      players: [],
+      currentIndex: 0,
+      throws: [] // { player: string, type: 'throw' | 'penalty', timestamp: string }
+    };
+
+    // Laad opgeslagen data
+    const saved = localStorage.getItem('klootschiet_state');
+    if (saved) {
+      try { state = JSON.parse(saved); } catch (e) {}
+    }
+
+    const setupScreen = document.getElementById('setupScreen');
+    const gameScreen = document.getElementById('gameScreen');
+    const playerListUI = document.getElementById('playerListUI');
+    const newPlayerInput = document.getElementById('newPlayerInput');
+    const teamNameInput = document.getElementById('teamNameInput');
+
+    function saveState() {
+      localStorage.setItem('klootschiet_state', JSON.stringify(state));
+    }
+
+    function renderSetupList() {
+      playerListUI.innerHTML = '';
+      state.players.forEach((p, index) => {
+        const li = document.createElement('li');
+        li.className = 'flex justify-between items-center bg-white px-3 py-1.5 rounded border text-sm';
+        li.innerHTML = `
+          <span><b>${index + 1}.</b> ${p}</span>
+          <button class="text-slate-400 hover:text-rose-600" onclick="removePlayer(${index})">✕</button>
+        `;
+        playerListUI.appendChild(li);
+      });
+      teamNameInput.value = state.teamName;
+    }
+
+    window.removePlayer = (idx) => {
+      state.players.splice(idx, 1);
+      renderSetupList();
+      saveState();
+    };
+
+    document.getElementById('addPlayerBtn').addEventListener('click', () => {
+      const val = newPlayerInput.value.trim();
+      if (val) {
+        state.players.push(val);
+        newPlayerInput.value = '';
+        renderSetupList();
+        saveState();
+      }
+    });
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      if (state.players.length === 0) {
+        alert('Voeg minimaal één speler toe!');
+        return;
+      }
+      state.teamName = teamNameInput.value || 'Klootschieters';
+      saveState();
+      showGame();
+    });
+
+    function showGame() {
+      setupScreen.classList.add('hidden');
+      gameScreen.classList.remove('hidden');
+      updateGameUI();
+    }
+
+    function updateGameUI() {
+      const curr = state.players[state.currentIndex];
+      const nextIndex = (state.currentIndex + 1) % state.players.length;
+      const next = state.players[nextIndex];
+
+      document.getElementById('currentPlayerName').textContent = curr;
+      document.getElementById('nextPlayerInfo').textContent = `Hierna: ${next}`;
+
+      const normalThrows = state.throws.filter(t => t.type === 'throw').length;
+      const penaltyThrows = state.throws.filter(t => t.type === 'penalty').length;
+
+      document.getElementById('totalThrowsCount').textContent = normalThrows + penaltyThrows;
+      document.getElementById('penaltyThrowsCount').textContent = penaltyThrows;
+
+      // Update log
+      const logBox = document.getElementById('historyLog');
+      logBox.innerHTML = '';
+      [...state.throws].reverse().forEach((t, i) => {
+        const item = document.createElement('div');
+        item.textContent = `${state.throws.length - i}. [${t.player}] - ${t.type === 'throw' ? 'Gooi' : '💦 Sloot (+1)'}`;
+        logBox.appendChild(item);
+      });
+    }
+
+    // Gooi actie
+    document.getElementById('throwBtn').addEventListener('click', () => {
+      const curr = state.players[state.currentIndex];
+      state.throws.push({ player: curr, type: 'throw', ts: new Date().toLocaleTimeString() });
+      state.currentIndex = (state.currentIndex + 1) % state.players.length;
+      saveState();
+      updateGameUI();
+    });
+
+    // Strafworp
+    document.getElementById('penaltyBtn').addEventListener('click', () => {
+      const curr = state.players[state.currentIndex];
+      state.throws.push({ player: curr, type: 'penalty', ts: new Date().toLocaleTimeString() });
+      saveState();
+      updateGameUI();
+    });
+
+    // Undo actie
+    document.getElementById('undoBtn').addEventListener('click', () => {
+      if (state.throws.length === 0) return;
+      const last = state.throws.pop();
+      if (last.type === 'throw') {
+        state.currentIndex = (state.currentIndex - 1 + state.players.length) % state.players.length;
+      }
+      saveState();
+      updateGameUI();
+    });
+
+    // Reset
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      if (confirm('Weet je zeker dat je de huidige stand wilt wissen en opnieuw wilt beginnen?')) {
+        state.throws = [];
+        state.currentIndex = 0;
+        saveState();
+        gameScreen.classList.add('hidden');
+        setupScreen.classList.remove('hidden');
+      }
+    });
+
+    // Initial check
+    if (state.throws.length > 0) {
+      showGame();
+    } else {
+      renderSetupList();
+    }
+
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(console.error);
+    }
+  </script>
+</body>
+</html>
