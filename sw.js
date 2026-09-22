@@ -1,9 +1,10 @@
-const CACHE_NAME = 'schapendrift-kloot-v4';
+const CACHE_NAME = 'schapendrift-kloot-v5';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './icon.svg'
+  './icon.svg',
+  './route.svg'
 ];
 
 self.addEventListener('install', (e) => {
