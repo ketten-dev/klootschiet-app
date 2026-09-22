@@ -1,6 +1,6 @@
 {
-  "name": "Klootschieten Scorekaart",
-  "short_name": "Klootschieten",
+  "name": "Schapendrift Burendag Klootschiet Tracker",
+  "short_name": "Burendag Klootschieten",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#15803d",
