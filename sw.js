@@ -1,10 +1,13 @@
-const CACHE_NAME = 'schapendrift-kloot-v5';
+const CACHE_NAME = 'schapendrift-kloot-v6';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './icon.svg',
-  './route.svg'
+  './route.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png'
 ];
 
 self.addEventListener('install', (e) => {
