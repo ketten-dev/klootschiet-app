@@ -1,5 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#15803d"/>
-  <circle cx="256" cy="256" r="150" fill="#fff"/>
-  <circle cx="256" cy="256" r="150" fill="none" stroke="#065f46" stroke-width="16"/>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#bae6fd"/>
+      <stop offset="1" stop-color="#e0f2fe"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <path d="M0 512V380C120 340 240 340 340 372S460 400 512 360V512Z" fill="#059669"/>
+  <path d="M0 512V420C140 390 280 400 380 420S480 430 512 410V512Z" fill="#047857"/>
+  <!-- Wolkenschaap (zelfde vorm als in de header), binnen de veilige zone voor maskable -->
+  <g transform="translate(84 136) scale(5)">
+    <g stroke="#475569" stroke-width="2.4" stroke-linecap="round">
+      <path d="M20 30v7M28 31v7M38 31v7M46 30v7"/>
+    </g>
+    <g fill="#fff" stroke="#e2e8f0" stroke-width="1">
+      <circle cx="18" cy="20" r="9"/><circle cx="27" cy="13" r="10"/><circle cx="38" cy="13" r="9"/>
+      <circle cx="46" cy="21" r="8"/><circle cx="36" cy="25" r="9"/><circle cx="24" cy="25" r="9"/>
+    </g>
+    <ellipse cx="54" cy="19" rx="6" ry="7.5" fill="#475569"/>
+    <ellipse cx="51" cy="13" rx="3" ry="1.6" fill="#475569" transform="rotate(-25 51 13)"/>
+    <circle cx="56" cy="17" r="1.1" fill="#fff"/>
+  </g>
 </svg>
