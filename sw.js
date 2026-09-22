@@ -1,4 +1,4 @@
-const CACHE_NAME = 'klootschiet-v1';
+const CACHE_NAME = 'schapendrift-kloot-v3';
 const ASSETS = [
   './',
   './index.html',
