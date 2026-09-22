@@ -1,8 +1,9 @@
-const CACHE_NAME = 'schapendrift-kloot-v3';
+const CACHE_NAME = 'schapendrift-kloot-v4';
 const ASSETS = [
   './',
   './index.html',
-  './manifest.json'
+  './manifest.json',
+  './icon.svg'
 ];
 
 self.addEventListener('install', (e) => {
@@ -25,8 +26,16 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// Network-first: met bereik altijd de nieuwste versie, zonder bereik uit de cache
 self.addEventListener('fetch', (e) => {
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
-    caches.match(e.request).then((res) => res || fetch(e.request))
+    fetch(e.request)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, copy));
+        return res;
+      })
+      .catch(() => caches.match(e.request).then((res) => res || caches.match('./index.html')))
   );
 });

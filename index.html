@@ -2,117 +2,211 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Schapendrift Burendag Klootschiet Tracker</title>
   <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <meta name="theme-color" content="#15803d">
-  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { -webkit-tap-highlight-color: transparent; }
+    /* Eigen CSS i.p.v. Tailwind CDN, zodat de app ook offline opgemaakt blijft */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; padding: 16px;
+      display: flex; flex-direction: column; align-items: center;
+      background: #f1f5f9; color: #1e293b;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; border: 0; }
+    .hidden { display: none !important; }
+
+    .card {
+      width: 100%; max-width: 28rem; background: #fff; border: 1px solid #e2e8f0;
+      border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,.08); overflow: hidden;
+    }
+    header { background: #047857; color: #fff; padding: 16px; text-align: center; }
+    header .edition { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: #a7f3d0; }
+    header h1 { margin: 2px 0 0; font-size: 1.125rem; font-weight: 900; line-height: 1.2; }
+    header .team { margin: 6px 0 0; font-size: .95rem; font-weight: 700; color: #ecfdf5; }
+
+    .screen { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+    label { display: block; font-size: .875rem; font-weight: 600; margin-bottom: 4px; color: #334155; }
+    input[type=text] {
+      width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: .5rem; outline: none;
+    }
+    input[type=text]:focus { border-color: #10b981; box-shadow: 0 0 0 2px #a7f3d0; }
+    .row { display: flex; gap: 8px; }
+    .row input { flex: 1; }
+
+    .btn { border-radius: .75rem; font-weight: 700; padding: 12px; width: 100%; }
+    .btn:active { transform: scale(.98); }
+    .btn-green { background: #059669; color: #fff; }
+    .btn-green:hover { background: #047857; }
+    .btn-dark { background: #047857; color: #fff; }
+    .btn-dark:hover { background: #065f46; }
+    .btn-add { width: auto; padding: 0 16px; border-radius: .5rem; font-size: 1.25rem; }
+    .btn-throw { font-size: 1.25rem; font-weight: 900; padding: 16px; border-radius: 1rem; }
+    .btn-penalty { background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; font-weight: 600; font-size: .875rem; padding: 10px; }
+    .btn-penalty:hover { background: #ffe4e6; }
+    .btn-link { background: none; font-size: .75rem; padding: 4px; }
+
+    #playerListUI {
+      list-style: none; margin: 0; padding: 8px; max-height: 12rem; overflow-y: auto;
+      border: 1px dashed #cbd5e1; border-radius: .5rem; background: #f8fafc;
+      display: flex; flex-direction: column; gap: 6px; min-height: 3rem;
+    }
+    #playerListUI li {
+      display: flex; justify-content: space-between; align-items: center;
+      background: #fff; border: 1px solid #e2e8f0; border-radius: .25rem; padding: 6px 12px; font-size: .875rem;
+    }
+    #playerListUI li button { background: none; color: #94a3b8; font-weight: 700; }
+    #playerListUI li button:hover { color: #e11d48; }
+    #playerListUI .empty { color: #94a3b8; font-size: .8rem; text-align: center; background: none; border: 0; justify-content: center; }
+
+    .turn { background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: .75rem; padding: 16px; text-align: center; }
+    .turn .lbl { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: #047857; font-weight: 600; }
+    .turn h2 { margin: 2px 0 0; font-size: 1.5rem; font-weight: 900; color: #022c22; }
+    .turn p { margin: 4px 0 0; font-size: .75rem; color: #64748b; }
+
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+    .stat { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: .75rem; padding: 10px 4px; }
+    .stat .lbl { font-size: .7rem; color: #64748b; }
+    .stat .val { font-size: 1.75rem; font-weight: 800; }
+    .stat.pen .val { color: #e11d48; }
+    .stat.tot .val { color: #047857; }
+
+    .actions { display: flex; flex-direction: column; gap: 12px; }
+    .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .history-head span { font-size: .75rem; font-weight: 600; color: #475569; }
+    #undoBtn { color: #e11d48; }
+    #historyLog {
+      font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .75rem; color: #475569;
+      border: 1px solid #e2e8f0; border-radius: .5rem; padding: 8px; background: #f8fafc;
+      max-height: 7rem; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+    }
+    #resetBtn { color: #94a3b8; }
+    #resetBtn:hover { color: #f43f5e; }
+
+    details.rules { border-top: 1px solid #e2e8f0; padding: 12px 20px; font-size: .875rem; }
+    details.rules summary { font-weight: 700; color: #047857; cursor: pointer; }
+    details.rules ol { margin: 8px 0 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 6px; color: #334155; }
   </style>
 </head>
-<body class="bg-slate-100 min-h-screen text-slate-800 flex flex-col items-center p-4">
+<body>
 
-  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col border border-slate-200">
-    
-    <!-- Header -->
-    <header class="bg-emerald-700 text-white p-4 text-center">
-      <span class="text-xs uppercase font-semibold tracking-wider text-emerald-200 block">Burendag Editie</span>
-      <h1 class="text-lg font-black tracking-wide leading-tight mt-0.5">🌳 Schapendrift Klootschiet Tracker</h1>
-      <p id="subStatus" class="text-xs text-emerald-100 mt-1">Klaar voor de start</p>
+  <div class="card">
+
+    <header>
+      <span class="edition">Burendag Editie</span>
+      <h1>Schapendrift Klootschiet Tracker</h1>
+      <p id="teamHeader" class="team hidden"></p>
     </header>
 
     <!-- Setup Scherm (Spelers toevoegen) -->
-    <div id="setupScreen" class="p-5 flex-1 flex flex-col space-y-4">
+    <div id="setupScreen" class="screen">
       <div>
-        <label class="block text-sm font-semibold mb-1 text-slate-700">Teamnaam</label>
-        <input id="teamNameInput" type="text" placeholder="Bijv. Team Schapendrift 1" class="w-full border rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-emerald-500">
+        <label for="teamNameInput">Teamnaam</label>
+        <input id="teamNameInput" type="text" placeholder="Bijv. Team Schapendrift 1">
       </div>
 
       <div>
-        <label class="block text-sm font-semibold mb-1 text-slate-700">Spelers (vaste gooi-volgorde)</label>
-        <div class="flex gap-2">
-          <input id="newPlayerInput" type="text" placeholder="Naam buur / werper" class="flex-1 border rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-emerald-500">
-          <button id="addPlayerBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 rounded-lg">+</button>
+        <label for="newPlayerInput">Spelers (vaste gooi-volgorde)</label>
+        <div class="row">
+          <input id="newPlayerInput" type="text" placeholder="Naam buur / werper">
+          <button id="addPlayerBtn" class="btn btn-green btn-add" aria-label="Speler toevoegen">+</button>
         </div>
       </div>
 
-      <ul id="playerListUI" class="space-y-1.5 flex-1 overflow-y-auto max-h-48 border border-dashed rounded-lg p-2 bg-slate-50">
-        <!-- Dynamische lijst -->
-      </ul>
+      <ul id="playerListUI"></ul>
 
-      <button id="startBtn" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-xl shadow mt-auto">
-        Start Tocht 🚀
-      </button>
+      <button id="startBtn" class="btn btn-dark">Start tocht</button>
     </div>
 
     <!-- Spel Scherm -->
-    <div id="gameScreen" class="p-5 flex-1 flex flex-col space-y-4 hidden">
-      
-      <!-- Actieve Speler Kaart -->
-      <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center shadow-inner">
-        <span class="text-xs uppercase tracking-wider text-emerald-700 font-semibold">Nu aan de beurt</span>
-        <h2 id="currentPlayerName" class="text-2xl font-black text-emerald-950 mt-0.5">-</h2>
-        <p id="nextPlayerInfo" class="text-xs text-slate-500 mt-1">Hierna: ...</p>
+    <div id="gameScreen" class="screen hidden">
+
+      <div class="turn">
+        <span class="lbl">Nu aan de beurt</span>
+        <h2 id="currentPlayerName">-</h2>
+        <p id="nextPlayerInfo">Hierna: ...</p>
       </div>
 
-      <!-- Teller Dashboard -->
-      <div class="grid grid-cols-2 gap-3 text-center">
-        <div class="bg-slate-50 border rounded-xl p-3">
-          <div class="text-xs text-slate-500">Geldige Worpen</div>
-          <div id="totalThrowsCount" class="text-3xl font-extrabold text-slate-800">0</div>
+      <div class="stats">
+        <div class="stat">
+          <div class="lbl">Worpen</div>
+          <div id="totalThrowsCount" class="val">0</div>
         </div>
-        <div class="bg-slate-50 border rounded-xl p-3">
-          <div class="text-xs text-slate-500">Strafworpen (Sloot)</div>
-          <div id="penaltyThrowsCount" class="text-3xl font-extrabold text-rose-600">0</div>
+        <div class="stat pen">
+          <div class="lbl">Strafworpen</div>
+          <div id="penaltyThrowsCount" class="val">0</div>
         </div>
-      </div>
-
-      <!-- Grote Actieknoppen -->
-      <div class="space-y-3 pt-1">
-        <button id="throwBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition-transform text-white font-black py-4 rounded-2xl text-xl shadow-lg flex items-center justify-center gap-2">
-          🎯 Worp geteld!
-        </button>
-        
-        <button id="penaltyBtn" class="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-1.5">
-          💦 Plons / Sloot (+1 Strafworp)
-        </button>
-      </div>
-
-      <!-- Recente Worpen Log & Undo -->
-      <div class="flex-1 flex flex-col pt-1 min-h-0">
-        <div class="flex justify-between items-center mb-1">
-          <span class="text-xs font-semibold text-slate-600">Geschiedenis</span>
-          <button id="undoBtn" class="text-xs text-rose-600 hover:underline">↩ Ongedaan maken</button>
-        </div>
-        <div id="historyLog" class="text-xs border rounded-lg p-2 bg-slate-50 flex-1 overflow-y-auto space-y-1 text-slate-600 font-mono max-h-28">
-          <!-- Worpen log -->
+        <div class="stat tot">
+          <div class="lbl">Totaal</div>
+          <div id="scoreCount" class="val">0</div>
         </div>
       </div>
 
-      <!-- WhatsApp Deelknop -->
-      <button id="shareBtn" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-xl shadow flex items-center justify-center gap-2">
-        <span>💬</span> Deel uitslag via WhatsApp
-      </button>
+      <div class="actions">
+        <button id="throwBtn" class="btn btn-green btn-throw">Worp</button>
+        <button id="penaltyBtn" class="btn btn-penalty">Worp in sloot / berm (+1 strafworp)</button>
+      </div>
 
-      <button id="resetBtn" class="text-xs text-slate-400 hover:text-rose-500 text-center pt-1">
-        Tocht afronden / Opnieuw beginnen
-      </button>
+      <div>
+        <div class="history-head">
+          <span>Geschiedenis</span>
+          <button id="undoBtn" class="btn-link">Ongedaan maken</button>
+        </div>
+        <div id="historyLog"></div>
+      </div>
+
+      <button id="shareBtn" class="btn btn-dark">Deel uitslag via WhatsApp</button>
+
+      <button id="resetBtn" class="btn-link">Tocht afronden / Opnieuw beginnen</button>
     </div>
+
+    <!-- Spelregels, op beide schermen beschikbaar -->
+    <details class="rules">
+      <summary>Spelregels</summary>
+      <ol>
+        <li>Doel: het parcours afleggen in zo weinig mogelijk worpen. Het team met het laagste totaal wint.</li>
+        <li>Spelers gooien om de beurt in de vaste volgorde die bij de start is ingevoerd.</li>
+        <li>Gooi onderhands en roep "Daar komt ie!" voordat je gooit.</li>
+        <li>De volgende worp gaat vanaf de plek waar de kloot stil is komen te liggen.</li>
+        <li>Belandt de kloot in de sloot of berm? Leg hem terug op de weg, ter hoogte van waar hij eraf ging. De worp telt, het team krijgt 1 strafworp erbij en de volgende speler gooit vanaf die plek.</li>
+        <li>Einde tocht: totaal = worpen + strafworpen. Deel de uitslag via WhatsApp met de organisatie.</li>
+      </ol>
+    </details>
 
   </div>
 
   <script>
+    const STORAGE_KEY = 'klootschiet_state';
+
     let state = {
       teamName: '',
       players: [],
       currentIndex: 0,
-      throws: []
+      started: false,
+      throws: [] // { player, penalty: boolean }
     };
 
-    const saved = localStorage.getItem('klootschiet_state');
-    if (saved) {
-      try { state = JSON.parse(saved); } catch (e) {}
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) state = Object.assign(state, JSON.parse(saved));
+    } catch (e) {}
+
+    // Oude opslag (losse 'penalty'-regels) omzetten naar een vlag op de worp
+    if (state.throws.some(t => t.type)) {
+      const migrated = [];
+      state.throws.forEach(t => {
+        if (t.type === 'penalty' && migrated.length && !migrated[migrated.length - 1].penalty) {
+          migrated[migrated.length - 1].penalty = true;
+        } else if (t.type === 'throw') {
+          migrated.push({ player: t.player, penalty: false });
+        }
+      });
+      state.throws = migrated;
     }
 
     const setupScreen = document.getElementById('setupScreen');
@@ -120,45 +214,85 @@
     const playerListUI = document.getElementById('playerListUI');
     const newPlayerInput = document.getElementById('newPlayerInput');
     const teamNameInput = document.getElementById('teamNameInput');
+    const teamHeader = document.getElementById('teamHeader');
 
     function saveState() {
-      localStorage.setItem('klootschiet_state', JSON.stringify(state));
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    }
+
+    function teamName() {
+      return state.teamName.trim() || 'Team Schapendrift';
+    }
+
+    function renderTeamHeader(visible) {
+      teamHeader.textContent = teamName();
+      teamHeader.classList.toggle('hidden', !visible);
     }
 
     function renderSetupList() {
       playerListUI.innerHTML = '';
+      if (state.players.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'empty';
+        li.textContent = 'Nog geen spelers toegevoegd';
+        playerListUI.appendChild(li);
+      }
       state.players.forEach((p, index) => {
         const li = document.createElement('li');
-        li.className = 'flex justify-between items-center bg-white px-3 py-1.5 rounded border text-sm';
-        li.innerHTML = `
-          <span><b>${index + 1}.</b> ${p}</span>
-          <button class="text-slate-400 hover:text-rose-600 font-bold" onclick="removePlayer(${index})">✕</button>
-        `;
+        const name = document.createElement('span');
+        const nr = document.createElement('b');
+        nr.textContent = `${index + 1}. `;
+        name.append(nr, p);
+        const del = document.createElement('button');
+        del.textContent = '✕';
+        del.setAttribute('aria-label', `Verwijder ${p}`);
+        del.addEventListener('click', () => {
+          state.players.splice(index, 1);
+          saveState();
+          renderSetupList();
+        });
+        li.append(name, del);
         playerListUI.appendChild(li);
       });
-      teamNameInput.value = state.teamName;
     }
 
-    window.removePlayer = (idx) => {
-      state.players.splice(idx, 1);
+    function showSetup() {
+      gameScreen.classList.add('hidden');
+      setupScreen.classList.remove('hidden');
+      teamNameInput.value = state.teamName;
+      renderTeamHeader(false);
       renderSetupList();
+    }
+
+    function showGame() {
+      setupScreen.classList.add('hidden');
+      gameScreen.classList.remove('hidden');
+      renderTeamHeader(true);
+      updateGameUI();
+    }
+
+    // Teamnaam direct bewaren, zodat hij niet verdwijnt bij het toevoegen van spelers
+    teamNameInput.addEventListener('input', () => {
+      state.teamName = teamNameInput.value;
       saveState();
-    };
+    });
 
     document.getElementById('addPlayerBtn').addEventListener('click', () => {
       const val = newPlayerInput.value.trim();
-      if (val) {
-        state.players.push(val);
-        newPlayerInput.value = '';
-        renderSetupList();
-        saveState();
+      if (!val) return;
+      if (state.players.some(p => p.toLowerCase() === val.toLowerCase())) {
+        alert(`${val} staat al in de lijst. Gebruik bijvoorbeeld ook de achternaam.`);
+        return;
       }
+      state.players.push(val);
+      newPlayerInput.value = '';
+      newPlayerInput.focus();
+      saveState();
+      renderSetupList();
     });
 
-    newPlayerInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        document.getElementById('addPlayerBtn').click();
-      }
+    newPlayerInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('addPlayerBtn').click();
     });
 
     document.getElementById('startBtn').addEventListener('click', () => {
@@ -166,64 +300,55 @@
         alert('Voeg minimaal één speler toe!');
         return;
       }
-      state.teamName = teamNameInput.value || 'Team Schapendrift';
+      state.teamName = teamNameInput.value.trim();
+      state.currentIndex = 0;
+      state.started = true;
       saveState();
       showGame();
     });
 
-    function showGame() {
-      setupScreen.classList.add('hidden');
-      gameScreen.classList.remove('hidden');
-      updateGameUI();
+    function counts() {
+      const normal = state.throws.length;
+      const penalties = state.throws.filter(t => t.penalty).length;
+      return { normal, penalties, total: normal + penalties };
     }
 
     function updateGameUI() {
       const curr = state.players[state.currentIndex];
-      const nextIndex = (state.currentIndex + 1) % state.players.length;
-      const next = state.players[nextIndex];
+      const next = state.players[(state.currentIndex + 1) % state.players.length];
 
       document.getElementById('currentPlayerName').textContent = curr;
       document.getElementById('nextPlayerInfo').textContent = `Hierna: ${next}`;
 
-      const normalThrows = state.throws.filter(t => t.type === 'throw').length;
-      const penaltyThrows = state.throws.filter(t => t.type === 'penalty').length;
-
-      document.getElementById('totalThrowsCount').textContent = normalThrows;
-      document.getElementById('penaltyThrowsCount').textContent = penaltyThrows;
+      const c = counts();
+      document.getElementById('totalThrowsCount').textContent = c.normal;
+      document.getElementById('penaltyThrowsCount').textContent = c.penalties;
+      document.getElementById('scoreCount').textContent = c.total;
 
       const logBox = document.getElementById('historyLog');
       logBox.innerHTML = '';
       [...state.throws].reverse().forEach((t, i) => {
         const item = document.createElement('div');
-        item.textContent = `${state.throws.length - i}. [${t.player}] - ${t.type === 'throw' ? '🎯 Worp' : '💦 Sloot (+1)'}`;
+        item.textContent = `${state.throws.length - i}. [${t.player}] ${t.penalty ? 'Worp in sloot (+1)' : 'Worp'}`;
         logBox.appendChild(item);
       });
     }
 
-    // Worp registreren
-    document.getElementById('throwBtn').addEventListener('click', () => {
-      const curr = state.players[state.currentIndex];
-      state.throws.push({ player: curr, type: 'throw', ts: new Date().toLocaleTimeString() });
+    // Eén tik per worp: de strafworp hoort altijd bij de speler die net gooide
+    function registerThrow(penalty) {
+      state.throws.push({ player: state.players[state.currentIndex], penalty });
       state.currentIndex = (state.currentIndex + 1) % state.players.length;
       saveState();
       updateGameUI();
-    });
+    }
 
-    // Strafworp registreren
-    document.getElementById('penaltyBtn').addEventListener('click', () => {
-      const curr = state.players[state.currentIndex];
-      state.throws.push({ player: curr, type: 'penalty', ts: new Date().toLocaleTimeString() });
-      saveState();
-      updateGameUI();
-    });
+    document.getElementById('throwBtn').addEventListener('click', () => registerThrow(false));
+    document.getElementById('penaltyBtn').addEventListener('click', () => registerThrow(true));
 
-    // Undo actie
     document.getElementById('undoBtn').addEventListener('click', () => {
       if (state.throws.length === 0) return;
-      const last = state.throws.pop();
-      if (last.type === 'throw') {
-        state.currentIndex = (state.currentIndex - 1 + state.players.length) % state.players.length;
-      }
+      state.throws.pop();
+      state.currentIndex = (state.currentIndex - 1 + state.players.length) % state.players.length;
       saveState();
       updateGameUI();
     });
@@ -235,33 +360,16 @@
         return;
       }
 
-      const normalThrows = state.throws.filter(t => t.type === 'throw').length;
-      const penalties = state.throws.filter(t => t.type === 'penalty').length;
-      const total = normalThrows + penalties;
-
+      const c = counts();
       const playerStats = {};
       state.players.forEach(p => { playerStats[p] = { throws: 0, penalties: 0 }; });
-
       state.throws.forEach(t => {
         if (!playerStats[t.player]) playerStats[t.player] = { throws: 0, penalties: 0 };
-        if (t.type === 'throw') playerStats[t.player].throws++;
-        if (t.type === 'penalty') playerStats[t.player].penalties++;
+        playerStats[t.player].throws++;
+        if (t.penalty) playerStats[t.player].penalties++;
       });
 
-      // Beste werper(s) (minste totale beurten)
-      let minThrows = Infinity;
-      let besteWerpers = [];
-      for (const [name, stats] of Object.entries(playerStats)) {
-        const totalPlayer = stats.throws + stats.penalties;
-        if (totalPlayer < minThrows) {
-          minThrows = totalPlayer;
-          besteWerpers = [name];
-        } else if (totalPlayer === minThrows) {
-          besteWerpers.push(name);
-        }
-      }
-
-      // Pechvogel(s)
+      // Pechvogel(s): meeste worpen in de sloot
       let maxPenalties = 0;
       let pechvogels = [];
       for (const [name, stats] of Object.entries(playerStats)) {
@@ -274,50 +382,46 @@
       }
 
       const datum = new Date().toLocaleDateString('nl-NL');
-      let text = `🌳 *SCHAPENDRIFT BURENDAG KLOOTSCHIETEN* 🌳\n`;
-      text += `📅 Datum: ${datum}\n`;
-      text += `👥 Team: *${state.teamName || 'Team Schapendrift'}*\n`;
+      let text = `*SCHAPENDRIFT BURENDAG KLOOTSCHIETEN*\n`;
+      text += `Datum: ${datum}\n`;
+      text += `Team: *${teamName()}*\n`;
       text += `--------------------------------\n`;
-      text += `🎯 Geldige worpen: *${normalThrows}*\n`;
-      text += `💦 Sloot / Strafworpen: *${penalties}*\n`;
-      text += `🏆 *TOTAAL: ${total} worpen*\n`;
-      text += `🥇 Beste werper (minste beurten): *${besteWerpers.join(', ')}* (${minThrows} beurten)\n`;
+      text += `Worpen: *${c.normal}*\n`;
+      text += `Strafworpen (sloot/berm): *${c.penalties}*\n`;
+      text += `*TOTAAL: ${c.total}*\n`;
       if (maxPenalties > 0) {
-        text += `🤿 Pechvogel van de straat: *${pechvogels.join(', ')}* (${maxPenalties}x sloot/struik)\n`;
+        text += `Pechvogel van de straat: *${pechvogels.join(', ')}* (${maxPenalties}x sloot/berm)\n`;
       }
       text += `--------------------------------\n`;
       text += `*Worpen per buur:*\n`;
-
       for (const [name, stats] of Object.entries(playerStats)) {
-        text += `• ${name}: ${stats.throws} worpen ${stats.penalties > 0 ? `(+${stats.penalties} 💦)` : ''}\n`;
+        text += `- ${name}: ${stats.throws} worpen${stats.penalties > 0 ? `, waarvan ${stats.penalties} in de sloot` : ''}\n`;
       }
 
       if (navigator.share) {
         navigator.share({
-          title: `Schapendrift Burendag Klootschieten - ${state.teamName}`,
+          title: `Schapendrift Burendag Klootschieten - ${teamName()}`,
           text: text
         }).catch(() => {});
       } else {
-        const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
-        window.open(waUrl, '_blank');
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
       }
     });
 
-    // Reset knop
     document.getElementById('resetBtn').addEventListener('click', () => {
       if (confirm('Weet je zeker dat je de huidige stand wilt wissen en een nieuwe ronde wilt starten?')) {
         state.throws = [];
         state.currentIndex = 0;
+        state.started = false;
         saveState();
-        gameScreen.classList.add('hidden');
-        setupScreen.classList.remove('hidden');
+        showSetup();
       }
     });
 
-    if (state.throws.length > 0) {
+    if ((state.started || state.throws.length > 0) && state.players.length > 0) {
       showGame();
     } else {
-      renderSetupList();
+      showSetup();
     }
 
     if ('serviceWorker' in navigator) {
