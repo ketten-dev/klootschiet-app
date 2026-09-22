@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maakt route.svg uit de Google My Maps-kaart (KML).
+"""Maakt route.svg en de routelijst in index.html uit de Google My Maps-kaart (KML).
 
 Gebruik:  python3 tools/route_svg.py            (haalt de KML online op)
           python3 tools/route_svg.py kaart.kml  (lokaal bestand)
@@ -9,7 +9,11 @@ Gebruik:  python3 tools/route_svg.py            (haalt de KML online op)
   worden gestippeld aangevuld.
 - Alleen de zelf benoemde punten (blauwe markers) komen op de kaart;
   de automatisch toegevoegde adres-markers van routes worden overgeslagen.
+- Naam en beschrijving van elk punt komen in index.html tussen
+  <!-- route:start --> en <!-- route:end -->.
 """
+import html
+import re
 import math
 import sys
 import urllib.request
@@ -18,6 +22,7 @@ import xml.etree.ElementTree as ET
 MAP_ID = '1GWpJKJcyX5PjGuHJzG13yZkYYQDCbX4'
 KML_URL = f'https://www.google.com/maps/d/kml?mid={MAP_ID}&forcekml=1'
 OUT = 'route.svg'
+HTML = 'index.html'
 POINT_STYLE = '#icon-1899-0288D1'   # blauwe markers = eigen punten
 GAP_M = 15                          # kleiner gat wordt niet gestippeld
 
@@ -42,13 +47,14 @@ def main():
     for pm in root.iter('{%s}Placemark' % NS['k']):
         style = pm.findtext('k:styleUrl', default='', namespaces=NS)
         name = (pm.findtext('k:name', default='', namespaces=NS) or '').strip()
+        desc = (pm.findtext('k:description', default='', namespaces=NS) or '').strip()
         if pm.find('.//k:LineString', NS) is not None:
             lines.append(coords(pm))
         elif pm.find('.//k:Point', NS) is not None and style.startswith(POINT_STYLE):
-            points.append((name, coords(pm)[0]))
+            points.append((name, coords(pm)[0], desc))
 
     # Lokale projectie in meters (equirectangulair, ruim nauwkeurig genoeg voor ~1 km)
-    allpts = [p for l in lines for p in l] + [p for _, p in points]
+    allpts = [p for l in lines for p in l] + [p for _, p, _ in points]
     lat0 = sum(p[1] for p in allpts) / len(allpts)
     kx, ky = 111320 * math.cos(math.radians(lat0)), 110540
 
@@ -86,13 +92,13 @@ def main():
             out.append(f'<path d="{path([l[-1], lines[i + 1][0]])}" fill="none" stroke="#059669" '
                        'stroke-width="4" stroke-dasharray="2 8" stroke-linecap="round"/>')
 
-    for n, (name, p) in enumerate(points, 1):
+    for n, (name, p, _) in enumerate(points, 1):
         x, y = xy(p)
         out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="10" fill="#047857" stroke="#fff" stroke-width="2"/>')
         out.append(f'<text x="{x:.1f}" y="{y + 4:.1f}" text-anchor="middle" font-size="11" '
                    f'font-weight="700" fill="#fff">{n}</text>')
         out.append(f'<text x="{x + 14:.1f}" y="{y + 4:.1f}" font-size="12" font-weight="600" '
-                   f'fill="#1e293b" stroke="#f8fafc" stroke-width="3" paint-order="stroke">{name}</text>')
+                   f'fill="#1e293b" stroke="#f8fafc" stroke-width="3" paint-order="stroke">{html.escape(name)}</text>')
 
     # Schaalbalk 100 m en noordpijl
     bar = 100 * s
@@ -109,7 +115,30 @@ def main():
     with open(OUT, 'w') as f:
         f.write('\n'.join(out) + '\n')
     print(f'{OUT}: {len(lines)} lijnen, {len(points)} punten, ca. {total:.0f} m')
-    print('Punten:', ', '.join(n for n, _ in points))
+    write_html_list(points)
+    print('Punten:', ', '.join(n for n, _, _ in points))
+
+
+def clean(text):
+    # My Maps-beschrijvingen kunnen <br> en andere HTML bevatten
+    text = re.sub(r'<br\s*/?>', ' ', text)
+    text = re.sub(r'<[^>]+>', '', text)
+    return html.escape(' '.join(html.unescape(text).split()))
+
+
+def write_html_list(points):
+    items = []
+    for name, _, desc in points:
+        line = f'<b>{clean(name)}</b>' + (f': {clean(desc)}' if desc else '')
+        items.append(f'        <li>{line}</li>')
+    block = '<!-- route:start -->\n      <ol>\n' + '\n'.join(items) + '\n      </ol>\n      <!-- route:end -->'
+    with open(HTML) as f:
+        page = f.read()
+    new, n = re.subn(r'<!-- route:start -->.*?<!-- route:end -->', lambda _: block, page, flags=re.S)
+    if n != 1:
+        sys.exit(f'{HTML}: markers <!-- route:start/end --> niet gevonden')
+    with open(HTML, 'w') as f:
+        f.write(new)
 
 
 if __name__ == '__main__':
