@@ -1,4 +1,4 @@
-const CACHE_NAME = 'schapendrift-kloot-v6';
+const CACHE_NAME = 'schapendrift-kloot-v7';
 const ASSETS = [
   './',
   './index.html',

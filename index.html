@@ -108,6 +108,17 @@
     .stat.tot .val { color: #047857; }
 
     .actions { display: flex; flex-direction: column; gap: 12px; }
+    /* Meekijken (live delen met het team) */
+    .sync { border: 1px solid #bae6fd; background: #f0f9ff; border-radius: .75rem; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .sync p { margin: 0; font-size: .8rem; color: #075985; }
+    .sync .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; margin-right: 6px; vertical-align: middle; }
+    .sync .dot.on { background: #16a34a; }
+    .sync .dot.wait { background: #f59e0b; }
+    .sync .fine { font-size: .7rem; color: #64748b; }
+    .btn-sky { background: #0369a1; color: #fff; }
+    .btn-sky:hover { background: #075985; }
+    .btn-outline { background: #fff; color: #0369a1; border: 1px solid #7dd3fc; }
+    .viewing .actions, .viewing #undoBtn, .viewing #resetBtn, .viewing #syncBox { display: none; }
     .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
     .history-head span { font-size: .75rem; font-weight: 600; color: #475569; }
     #undoBtn { color: #e11d48; }
@@ -220,6 +231,20 @@
         <div id="historyLog"></div>
       </div>
 
+      <!-- Teller: team laten meekijken -->
+      <div id="syncBox" class="sync">
+        <p id="syncStatus">Laat teamgenoten op hun eigen telefoon live meekijken.</p>
+        <button id="syncBtn" class="btn btn-sky">Laat je team meekijken</button>
+        <p class="fine">Namen en score gaan via de openbare dienst ntfy.sh. Alleen wie de link heeft kan meekijken; berichten verdwijnen na 12 uur.</p>
+      </div>
+
+      <!-- Meekijker: alleen-lezen -->
+      <div id="viewerBar" class="sync hidden">
+        <p id="viewStatus"><span class="dot"></span>Verbinden...</p>
+        <button id="takeoverBtn" class="btn btn-outline">Neem het tellen over</button>
+        <button id="stopViewBtn" class="btn-link">Stop met meekijken</button>
+      </div>
+
       <button id="shareBtn" class="btn btn-dark">Deel uitslag via WhatsApp</button>
 
       <button id="resetBtn" class="btn-link">Tocht afronden / Opnieuw beginnen</button>
@@ -260,17 +285,30 @@
 
   <script>
     const STORAGE_KEY = 'klootschiet_state';
+    const VIEW_KEY = 'klootschiet_view';       // code waarmee dit toestel meekijkt
+    const DEVICE_KEY = 'klootschiet_device';
+    const RELAY = 'https://ntfy.sh/';          // openbare pub/sub-dienst, geen account nodig
+    const MAX_MSG = 4000;                      // ntfy.sh maakt van >4096 bytes een bijlage
 
     let state = {
       teamName: '',
       players: [],
       currentIndex: 0,
       started: false,
-      throws: [] // { player, penalty: boolean }
+      throws: [],     // { player, penalty: boolean }
+      syncCode: null, // ntfy-kanaal als het team meekijkt
+      seq: 0          // volgnummer van de laatst verstuurde stand
     };
 
+    function load(key) {
+      try { return localStorage.getItem(key); } catch (e) { return null; }
+    }
+    function store(key, val) {
+      try { val === null ? localStorage.removeItem(key) : localStorage.setItem(key, val); } catch (e) {}
+    }
+
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = load(STORAGE_KEY);
       if (saved) state = Object.assign(state, JSON.parse(saved));
     } catch (e) {}
 
@@ -287,6 +325,20 @@
       state.throws = migrated;
     }
 
+    function randomId(n) {
+      const abc = 'abcdefghijkmnpqrstuvwxyz23456789';
+      const bytes = crypto.getRandomValues(new Uint8Array(n));
+      return Array.from(bytes, b => abc[b % abc.length]).join('');
+    }
+
+    let deviceId = load(DEVICE_KEY);
+    if (!deviceId) { deviceId = randomId(10); store(DEVICE_KEY, deviceId); }
+
+    // 'teller' registreert, 'viewer' kijkt alleen mee
+    let mode = 'teller';
+    let view = null;       // laatst ontvangen stand in meekijk-modus
+    let viewCode = null;
+
     const setupScreen = document.getElementById('setupScreen');
     const gameScreen = document.getElementById('gameScreen');
     const playerListUI = document.getElementById('playerListUI');
@@ -295,11 +347,16 @@
     const teamHeader = document.getElementById('teamHeader');
 
     function saveState() {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+      store(STORAGE_KEY, JSON.stringify(state));
     }
 
-    function teamName() {
-      return state.teamName.trim() || 'Team Schapendrift';
+    // De stand die op het scherm staat: eigen spel of die van de teller
+    function shown() {
+      return mode === 'viewer' && view ? view : state;
+    }
+
+    function teamName(s = shown()) {
+      return (s.teamName || '').trim() || 'Team Schapendrift';
     }
 
     function renderTeamHeader(visible) {
@@ -345,8 +402,11 @@
     function showGame() {
       setupScreen.classList.add('hidden');
       gameScreen.classList.remove('hidden');
+      gameScreen.classList.toggle('viewing', mode === 'viewer');
+      document.getElementById('viewerBar').classList.toggle('hidden', mode !== 'viewer');
       renderTeamHeader(true);
       updateGameUI();
+      renderSync();
     }
 
     // Teamnaam direct bewaren, zodat hij niet verdwijnt bij het toevoegen van spelers
@@ -385,63 +445,272 @@
       showGame();
     });
 
-    function counts() {
-      const normal = state.throws.length;
-      const penalties = state.throws.filter(t => t.penalty).length;
+    function counts(s = shown()) {
+      const normal = s.throws.length;
+      const penalties = s.throws.filter(t => t.penalty).length;
       return { normal, penalties, total: normal + penalties };
     }
 
     function updateGameUI() {
-      const curr = state.players[state.currentIndex];
-      const next = state.players[(state.currentIndex + 1) % state.players.length];
+      const s = shown();
+      if (!s.players.length) {
+        document.getElementById('currentPlayerName').textContent = '-';
+        document.getElementById('nextPlayerInfo').textContent = 'Wachten op de stand van de teller...';
+      } else {
+        const curr = s.players[s.currentIndex];
+        const next = s.players[(s.currentIndex + 1) % s.players.length];
+        document.getElementById('currentPlayerName').textContent = curr;
+        document.getElementById('nextPlayerInfo').textContent = `Hierna: ${next}`;
+      }
 
-      document.getElementById('currentPlayerName').textContent = curr;
-      document.getElementById('nextPlayerInfo').textContent = `Hierna: ${next}`;
-
-      const c = counts();
+      const c = counts(s);
       document.getElementById('totalThrowsCount').textContent = c.normal;
       document.getElementById('penaltyThrowsCount').textContent = c.penalties;
       document.getElementById('scoreCount').textContent = c.total;
 
       const logBox = document.getElementById('historyLog');
       logBox.innerHTML = '';
-      [...state.throws].reverse().forEach((t, i) => {
+      [...s.throws].reverse().forEach((t, i) => {
         const item = document.createElement('div');
-        item.textContent = `${state.throws.length - i}. [${t.player}] ${t.penalty ? 'Worp in sloot (+1)' : 'Worp'}`;
+        item.textContent = `${s.throws.length - i}. [${t.player}] ${t.penalty ? 'Worp in sloot (+1)' : 'Worp'}`;
         logBox.appendChild(item);
       });
     }
 
-    // Eén tik per worp: de strafworp hoort altijd bij de speler die net gooide
-    function registerThrow(penalty) {
-      state.throws.push({ player: state.players[state.currentIndex], penalty });
-      state.currentIndex = (state.currentIndex + 1) % state.players.length;
+    function afterChange() {
       saveState();
       updateGameUI();
+      publishSoon();
+    }
+
+    // Eén tik per worp: de strafworp hoort altijd bij de speler die net gooide
+    function registerThrow(penalty) {
+      if (mode !== 'teller') return;
+      state.throws.push({ player: state.players[state.currentIndex], penalty });
+      state.currentIndex = (state.currentIndex + 1) % state.players.length;
+      afterChange();
     }
 
     document.getElementById('throwBtn').addEventListener('click', () => registerThrow(false));
     document.getElementById('penaltyBtn').addEventListener('click', () => registerThrow(true));
 
     document.getElementById('undoBtn').addEventListener('click', () => {
-      if (state.throws.length === 0) return;
+      if (mode !== 'teller' || state.throws.length === 0) return;
       state.throws.pop();
       state.currentIndex = (state.currentIndex - 1 + state.players.length) % state.players.length;
+      afterChange();
+    });
+
+    // ---------- Meekijken via ntfy.sh ----------
+    // De teller stuurt na elke wijziging de complete stand (klein JSON-bericht).
+    // Meekijkers abonneren zich met since=latest: ze krijgen direct de laatste stand
+    // en daarna elke nieuwe. Omdat steeds de hele stand gaat, is er geen wachtrij nodig.
+
+    let publishTimer = null;
+    let pending = false;
+    let lastSent = null;
+    let source = null;
+    let connected = false;
+
+    function snapshot(extra = {}) {
+      return Object.assign({
+        v: 1,
+        by: deviceId,
+        seq: state.seq,
+        ts: Date.now(),
+        team: state.teamName,
+        players: state.players,
+        cur: state.currentIndex,
+        // per worp: spelerindex * 2 + (sloot ? 1 : 0)
+        t: state.throws.map(t => Math.max(0, state.players.indexOf(t.player)) * 2 + (t.penalty ? 1 : 0))
+      }, extra);
+    }
+
+    function fromSnapshot(m) {
+      return {
+        teamName: m.team || '',
+        players: m.players || [],
+        currentIndex: m.cur || 0,
+        throws: (m.t || []).map(x => ({ player: m.players[x >> 1], penalty: (x & 1) === 1 })),
+        seq: m.seq, ts: m.ts, by: m.by, ended: !!m.ended
+      };
+    }
+
+    function publishSoon() {
+      if (!state.syncCode || mode !== 'teller') return;
+      state.seq++;
       saveState();
-      updateGameUI();
+      pending = true;
+      clearTimeout(publishTimer);
+      publishTimer = setTimeout(publish, 700); // snelle tikken samenvoegen (ntfy rate limit)
+      renderSync();
+    }
+
+    async function publish(extra) {
+      if (!state.syncCode) return;
+      const body = JSON.stringify(snapshot(extra));
+      if (body.length > MAX_MSG) {
+        document.getElementById('syncStatus').textContent = 'De stand is te groot geworden om te delen.';
+        return;
+      }
+      try {
+        const res = await fetch(RELAY + state.syncCode, { method: 'POST', body });
+        if (!res.ok) throw new Error(res.status);
+        pending = false;
+        lastSent = new Date();
+      } catch (e) {
+        pending = true; // opnieuw bij bereik of via de retry-timer
+      }
+      renderSync();
+    }
+
+    setInterval(() => { if (pending && mode === 'teller') publish(); }, 15000);
+    window.addEventListener('online', () => { if (pending) publish(); });
+
+    function subscribe(code) {
+      if (source) source.close();
+      source = new EventSource(`${RELAY}${code}/sse?since=latest`);
+      source.onopen = () => { connected = true; renderSync(); };
+      source.onerror = () => {
+        connected = false;
+        renderSync();
+        // EventSource probeert zelf opnieuw; bij een definitieve fout doen wij het
+        if (source.readyState === EventSource.CLOSED) setTimeout(() => subscribe(code), 5000);
+      };
+      source.onmessage = (e) => {
+        let m;
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.event !== 'message') return;
+          m = JSON.parse(msg.message);
+        } catch (err) { return; }
+        if (m.v !== 1 || !Array.isArray(m.players)) return;
+        onRemote(m);
+      };
+    }
+
+    function onRemote(m) {
+      if (mode === 'viewer') {
+        if (view && view.seq > m.seq) return;
+        view = fromSnapshot(m);
+        showGame();
+        return;
+      }
+      // Teller: heeft een ander toestel het tellen overgenomen?
+      if (m.by !== deviceId && (m.seq > state.seq || (m.seq === state.seq && m.by > deviceId))) {
+        const code = state.syncCode;
+        state.syncCode = null;
+        saveState();
+        alert('Een ander toestel heeft het tellen overgenomen. Je kijkt nu mee.');
+        startViewing(code, m);
+      }
+    }
+
+    function shareLink(code) {
+      return `${location.origin}${location.pathname}#kijk=${code}`;
+    }
+
+    function shareViewLink() {
+      const url = shareLink(state.syncCode);
+      const text = `Kijk live mee met ${teamName(state)} bij het klootschieten: ${url}`;
+      if (navigator.share) {
+        navigator.share({ title: 'Meekijken klootschieten', text }).catch(() => {});
+      } else {
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+      }
+    }
+
+    document.getElementById('syncBtn').addEventListener('click', () => {
+      if (!state.syncCode) {
+        state.syncCode = 'schapendrift-' + randomId(16);
+        subscribe(state.syncCode);
+        publishSoon();
+      }
+      shareViewLink();
+    });
+
+    function renderSync() {
+      if (mode === 'teller') {
+        const status = document.getElementById('syncStatus');
+        const btn = document.getElementById('syncBtn');
+        if (!state.syncCode) {
+          status.textContent = 'Laat teamgenoten op hun eigen telefoon live meekijken.';
+          btn.textContent = 'Laat je team meekijken';
+          btn.className = 'btn btn-sky';
+          return;
+        }
+        btn.textContent = 'Deel meekijk-link';
+        btn.className = 'btn btn-outline';
+        status.innerHTML = '';
+        const dot = document.createElement('span');
+        dot.className = 'dot ' + (pending ? 'wait' : 'on');
+        const txt = pending
+          ? 'Nog niet verstuurd, gebeurt zodra er bereik is'
+          : `Live gedeeld${lastSent ? ', bijgewerkt ' + lastSent.toLocaleTimeString('nl-NL') : ''}`;
+        status.append(dot, txt);
+      } else {
+        const status = document.getElementById('viewStatus');
+        status.innerHTML = '';
+        const dot = document.createElement('span');
+        dot.className = 'dot ' + (connected ? 'on' : 'wait');
+        let txt = connected ? 'Je kijkt live mee' : 'Geen verbinding, probeert opnieuw...';
+        if (view && view.ts) txt += ` · stand van ${new Date(view.ts).toLocaleTimeString('nl-NL')}`;
+        if (view && view.ended) txt = 'De tocht is afgerond door de teller';
+        status.append(dot, txt);
+        document.getElementById('takeoverBtn').classList.toggle('hidden', !view || view.ended);
+      }
+    }
+
+    function startViewing(code, firstMsg) {
+      mode = 'viewer';
+      viewCode = code;
+      view = firstMsg ? fromSnapshot(firstMsg) : { teamName: '', players: [], currentIndex: 0, throws: [], seq: -1 };
+      store(VIEW_KEY, code);
+      subscribe(code);
+      showGame();
+    }
+
+    function stopViewing() {
+      if (source) source.close();
+      source = null;
+      mode = 'teller';
+      view = null;
+      viewCode = null;
+      store(VIEW_KEY, null);
+      startOwnGame();
+    }
+
+    document.getElementById('stopViewBtn').addEventListener('click', stopViewing);
+
+    document.getElementById('takeoverBtn').addEventListener('click', () => {
+      if (!view) return;
+      const warn = state.throws.length > 0 ? ' Je eigen stand op dit toestel wordt daarbij vervangen.' : '';
+      if (!confirm(`Wil je het tellen overnemen? Het andere toestel kijkt daarna mee.${warn}`)) return;
+      state = {
+        teamName: view.teamName, players: view.players.slice(), currentIndex: view.currentIndex,
+        started: true, throws: view.throws.map(t => ({ ...t })), syncCode: viewCode, seq: view.seq
+      };
+      mode = 'teller';
+      view = null;
+      store(VIEW_KEY, null);
+      saveState();
+      subscribe(state.syncCode);
+      showGame();
+      publishSoon(); // seq + 1: het oude toestel ziet dit en gaat meekijken
     });
 
     // WhatsApp Uitslag Delen
     document.getElementById('shareBtn').addEventListener('click', () => {
-      if (state.throws.length === 0) {
+      const s = shown();
+      if (s.throws.length === 0) {
         alert('Er zijn nog geen worpen geregistreerd om te delen!');
         return;
       }
 
-      const c = counts();
+      const c = counts(s);
       const playerStats = {};
-      state.players.forEach(p => { playerStats[p] = { throws: 0, penalties: 0 }; });
-      state.throws.forEach(t => {
+      s.players.forEach(p => { playerStats[p] = { throws: 0, penalties: 0 }; });
+      s.throws.forEach(t => {
         if (!playerStats[t.player]) playerStats[t.player] = { throws: 0, penalties: 0 };
         playerStats[t.player].throws++;
         if (t.penalty) playerStats[t.player].penalties++;
@@ -462,7 +731,7 @@
       const datum = new Date().toLocaleDateString('nl-NL');
       let text = `*SCHAPENDRIFT BURENDAG KLOOTSCHIETEN*\n`;
       text += `Datum: ${datum}\n`;
-      text += `Team: *${teamName()}*\n`;
+      text += `Team: *${teamName(s)}*\n`;
       text += `--------------------------------\n`;
       text += `Worpen: *${c.normal}*\n`;
       text += `Strafworpen (sloot/berm): *${c.penalties}*\n`;
@@ -478,7 +747,7 @@
 
       if (navigator.share) {
         navigator.share({
-          title: `Schapendrift Burendag Klootschieten - ${teamName()}`,
+          title: `Schapendrift Burendag Klootschieten - ${teamName(s)}`,
           text: text
         }).catch(() => {});
       } else {
@@ -488,18 +757,44 @@
 
     document.getElementById('resetBtn').addEventListener('click', () => {
       if (confirm('Weet je zeker dat je de huidige stand wilt wissen en een nieuwe ronde wilt starten?')) {
+        if (state.syncCode) {
+          // Meekijkers laten weten dat de tocht klaar is, daarna stoppen met delen
+          state.seq++;
+          publish({ ended: true });
+          if (source) source.close();
+          source = null;
+        }
         state.throws = [];
         state.currentIndex = 0;
         state.started = false;
+        state.syncCode = null;
         saveState();
         showSetup();
       }
     });
 
-    if ((state.started || state.throws.length > 0) && state.players.length > 0) {
-      showGame();
+    function startOwnGame() {
+      gameScreen.classList.remove('viewing');
+      document.getElementById('viewerBar').classList.add('hidden');
+      if ((state.started || state.throws.length > 0) && state.players.length > 0) {
+        if (state.syncCode) subscribe(state.syncCode);
+        if (state.syncCode) publish(); // na herladen de laatste stand nog eens zeker versturen
+        showGame();
+      } else {
+        showSetup();
+      }
+    }
+
+    // Opstarten: meekijk-link, eerder meekijken, of eigen spel
+    const hashCode = (location.hash.match(/^#kijk=([a-z0-9-]{8,64})$/) || [])[1];
+    if (hashCode) history.replaceState(null, '', location.pathname);
+    const savedView = load(VIEW_KEY);
+    if (hashCode && hashCode === state.syncCode) {
+      startOwnGame(); // eigen link geopend op het teltoestel
+    } else if (hashCode || savedView) {
+      startViewing(hashCode || savedView);
     } else {
-      showSetup();
+      startOwnGame();
     }
 
     if ('serviceWorker' in navigator) {
